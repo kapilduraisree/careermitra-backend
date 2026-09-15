@@ -1,58 +1,78 @@
 /**
- * Railway startup script
- * Runs schema migration + seed automatically on first deploy
+ * CareerMitra AI — Railway startup script
+ * 1. Runs DB migration if needed
+ * 2. Starts the Express server
  */
 require('dotenv').config();
+
 const { Client } = require('pg');
-const fs = require('fs');
+const fs   = require('fs');
 const path = require('path');
 
-const run = async () => {
-  const connectionConfig = process.env.DATABASE_URL
-    ? {
-        connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false },
-      }
-    : {
-        host:     process.env.DB_HOST     || 'localhost',
-        port:     parseInt(process.env.DB_PORT) || 5432,
-        database: process.env.DB_NAME     || 'careermitra',
-        user:     process.env.DB_USER     || 'postgres',
-        password: process.env.DB_PASSWORD || '',
-      };
+// ── Build connection config from Railway DATABASE_URL or individual vars ──────
+function getDbConfig() {
+  if (process.env.DATABASE_URL) {
+    console.log('Using DATABASE_URL for connection');
+    return {
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+    };
+  }
+  return {
+    host:     process.env.DB_HOST     || 'localhost',
+    port:     parseInt(process.env.DB_PORT || '5432'),
+    database: process.env.DB_NAME     || 'careermitra',
+    user:     process.env.DB_USER     || 'postgres',
+    password: process.env.DB_PASSWORD || '',
+  };
+}
 
-  const client = new Client(connectionConfig);
+// ── Run migration ─────────────────────────────────────────────────────────────
+async function migrate() {
+  const client = new Client(getDbConfig());
 
   try {
     await client.connect();
-    console.log('✅ Connected for migration');
+    console.log('✅ DB connected for migration check');
 
-    // Check if tables already exist
-    const { rows } = await client.query(
-      "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='users'"
-    );
+    // Check if schema already applied
+    const { rows } = await client.query(`
+      SELECT COUNT(*) as cnt
+      FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = 'users'
+    `);
 
-    if (parseInt(rows[0].count) === 0) {
-      console.log('▶ Running schema migration...');
-      const schema = fs.readFileSync(path.join(__dirname, '../database/schema.sql'), 'utf8');
-      await client.query(schema);
-      console.log('✅ Schema applied');
-
-      console.log('▶ Running seed data...');
-      const seed = fs.readFileSync(path.join(__dirname, '../database/seed.sql'), 'utf8');
-      await client.query(seed);
-      console.log('✅ Demo data seeded');
-    } else {
-      console.log('ℹ️  Database already initialized — skipping migration');
+    if (parseInt(rows[0].cnt) > 0) {
+      console.log('ℹ️  Schema already exists — skipping migration');
+      return;
     }
-  } catch (err) {
-    console.error('Migration error:', err.message);
-  } finally {
-    await client.end();
-  }
-};
 
-run().then(() => {
-  // Start the actual server
-  require('./src/server');
-});
+    console.log('▶ Applying schema...');
+    const schemaPath = path.join(__dirname, '../database/schema.sql');
+    const schema = fs.readFileSync(schemaPath, 'utf8');
+
+    // Split by semicolon and run statements one by one to avoid pg multi-statement issues
+    // Actually just run entire file — pg supports it
+    await client.query(schema);
+    console.log('✅ Schema applied');
+
+    console.log('▶ Seeding demo data...');
+    const seedPath = path.join(__dirname, '../database/seed.sql');
+    const seed = fs.readFileSync(seedPath, 'utf8');
+    await client.query(seed);
+    console.log('✅ Demo data seeded');
+
+  } catch (err) {
+    // Log but don't crash — server can still start with existing DB
+    console.warn('⚠️  Migration warning:', err.message);
+  } finally {
+    try { await client.end(); } catch (_) {}
+  }
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+(async () => {
+  await migrate();
+  // Now start the actual Express server
+  require('../src/server');
+})();

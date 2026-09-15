@@ -1,34 +1,35 @@
 const { Pool } = require('pg');
 
-// Railway provides DATABASE_URL as a single connection string
-// Fall back to individual vars for local development
-const pool = process.env.DATABASE_URL
-  ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production'
-        ? { rejectUnauthorized: false }
-        : false,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
-    })
-  : new Pool({
-      host:     process.env.DB_HOST     || 'localhost',
-      port:     parseInt(process.env.DB_PORT) || 5432,
-      database: process.env.DB_NAME     || 'careermitra',
-      user:     process.env.DB_USER     || 'postgres',
-      password: process.env.DB_PASSWORD || '',
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
-    });
+// Railway sets DATABASE_URL automatically when you add a PostgreSQL plugin
+// Local dev uses individual DB_* vars from .env
+const isProduction = process.env.NODE_ENV === 'production';
 
-pool.on('connect', () => {
-  console.log('✅ Connected to PostgreSQL database');
-});
+let poolConfig;
 
-pool.on('error', (err) => {
-  console.error('❌ Unexpected database error:', err.message);
-});
+if (process.env.DATABASE_URL) {
+  poolConfig = {
+    connectionString: process.env.DATABASE_URL,
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+  };
+} else {
+  poolConfig = {
+    host:     process.env.DB_HOST     || 'localhost',
+    port:     parseInt(process.env.DB_PORT || '5432'),
+    database: process.env.DB_NAME     || 'careermitra',
+    user:     process.env.DB_USER     || 'postgres',
+    password: process.env.DB_PASSWORD || '',
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+  };
+}
+
+const pool = new Pool(poolConfig);
+
+pool.on('connect', () => console.log('✅ Connected to PostgreSQL'));
+pool.on('error',   (err) => console.error('⚠️  DB pool error:', err.message));
 
 module.exports = pool;
