@@ -1,0 +1,182 @@
+﻿"""
+CareerMitra AI — Database Setup Script
+Uses Python + psycopg2 (already installed) since Node.js is not available.
+Run: python setup_database.py
+"""
+import psycopg2
+from psycopg2 import sql
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+import os, sys, getpass
+
+PGBIN = r"C:\Program Files\PostgreSQL\16\bin"
+
+def run():
+    print("=" * 60)
+    print("  CareerMitra AI — Database Setup")
+    print("=" * 60)
+    print()
+
+    host     = input("PostgreSQL host [localhost]: ").strip() or "localhost"
+    port     = input("PostgreSQL port [5432]: ").strip() or "5432"
+    admin_user = input("PostgreSQL admin user [postgres]: ").strip() or "postgres"
+    admin_pass = getpass.getpass(f"Password for '{admin_user}': ")
+    db_name  = input("Database name to create [careermitra]: ").strip() or "careermitra"
+
+    # ── Connect to postgres (admin) ───────────────────────────────────────────
+    try:
+        conn = psycopg2.connect(
+            host=host, port=port, database="postgres",
+            user=admin_user, password=admin_pass
+        )
+        conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+        cur = conn.cursor()
+        print(f"\n✅ Connected to PostgreSQL {host}:{port}")
+    except Exception as e:
+        print(f"❌ Connection failed: {e}")
+        sys.exit(1)
+
+    # ── Create database ───────────────────────────────────────────────────────
+    cur.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_name,))
+    if cur.fetchone():
+        print(f"ℹ  Database '{db_name}' already exists — skipping creation")
+    else:
+        cur.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(db_name)))
+        print(f"✅ Database '{db_name}' created")
+
+    cur.close()
+    conn.close()
+
+    # ── Connect to careermitra DB ─────────────────────────────────────────────
+    try:
+        conn2 = psycopg2.connect(
+            host=host, port=port, database=db_name,
+            user=admin_user, password=admin_pass
+        )
+        conn2.autocommit = False
+        cur2 = conn2.cursor()
+        print(f"✅ Connected to '{db_name}'")
+    except Exception as e:
+        print(f"❌ Cannot connect to {db_name}: {e}")
+        sys.exit(1)
+
+    # ── Run schema.sql ────────────────────────────────────────────────────────
+    schema_path = os.path.join(os.path.dirname(__file__), "database", "schema.sql")
+    print(f"\n▶  Running schema.sql...")
+    try:
+        with open(schema_path, "r", encoding="utf-8") as f:
+            schema_sql = f.read()
+        cur2.execute(schema_sql)
+        conn2.commit()
+        print("✅ Schema applied successfully")
+    except Exception as e:
+        conn2.rollback()
+        print(f"⚠  Schema warning (may already exist): {e}")
+        conn2.autocommit = True
+
+    # ── Run seed.sql ──────────────────────────────────────────────────────────
+    seed_path = os.path.join(os.path.dirname(__file__), "database", "seed.sql")
+    load_seed = input("\n▶  Load demo seed data? (y/n) [y]: ").strip().lower()
+    if load_seed in ("", "y", "yes"):
+        print("▶  Running seed.sql...")
+        try:
+            conn2.autocommit = False
+            with open(seed_path, "r", encoding="utf-8") as f:
+                seed_sql = f.read()
+            cur2.execute(seed_sql)
+            conn2.commit()
+            print("✅ Demo seed data inserted")
+        except Exception as e:
+            conn2.rollback()
+            print(f"⚠  Seed warning (some records may already exist): {e}")
+
+    # ── Verify ────────────────────────────────────────────────────────────────
+    print("\n▶  Verifying tables...")
+    try:
+        conn2.autocommit = True
+        cur2.execute("""
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = 'public'
+            ORDER BY table_name
+        """)
+        tables = [r[0] for r in cur2.fetchall()]
+        print(f"✅ {len(tables)} tables found:")
+        for t in tables:
+            print(f"   • {t}")
+
+        # Count demo records
+        for tbl, col in [("jobs","title"), ("exams","name"), ("questions","topic")]:
+            try:
+                cur2.execute(f"SELECT COUNT(*) FROM {tbl} WHERE is_demo = TRUE")
+                cnt = cur2.fetchone()[0]
+                print(f"   Demo {tbl}: {cnt} records")
+            except:
+                pass
+    except Exception as e:
+        print(f"Verification error: {e}")
+
+    # ── Write .env file ───────────────────────────────────────────────────────
+    env_path = os.path.join(os.path.dirname(__file__), ".env")
+    if not os.path.exists(env_path):
+        write_env = input(f"\n▶  Create .env file at {env_path}? (y/n) [y]: ").strip().lower()
+        if write_env in ("", "y", "yes"):
+            import secrets, string
+            def rand_secret():
+                alphabet = string.ascii_letters + string.digits + "!@#$%^&*()"
+                return "".join(secrets.choice(alphabet) for _ in range(48))
+
+            env_content = f"""# CareerMitra AI — Environment Variables
+# Generated by setup_database.py
+
+NODE_ENV=development
+PORT=5000
+
+DB_HOST={host}
+DB_PORT={port}
+DB_NAME={db_name}
+DB_USER={admin_user}
+DB_PASSWORD={admin_pass}
+
+JWT_SECRET={rand_secret()}
+JWT_EXPIRES_IN=7d
+JWT_REFRESH_SECRET={rand_secret()}
+JWT_REFRESH_EXPIRES_IN=30d
+
+# AI Provider — add your key below for real AI responses
+# Get free Gemini key: https://aistudio.google.com/app/apikey
+AI_PROVIDER=gemini
+AI_MODEL=gemini-1.5-flash
+GEMINI_API_KEY=
+
+UPLOAD_MAX_MB=5
+RESUME_UPLOAD_DIR=uploads/resumes
+AVATAR_UPLOAD_DIR=uploads/avatars
+
+ALLOWED_ORIGINS=http://localhost:3000,http://10.0.2.2:5000
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=100
+
+DEMO_MODE=true
+"""
+            with open(env_path, "w") as f:
+                f.write(env_content)
+            print(f"✅ .env written to {env_path}")
+            print("   ⚠  Keep this file private — never commit it to git")
+    else:
+        print(f"ℹ  .env already exists at {env_path} — not overwritten")
+
+    cur2.close()
+    conn2.close()
+
+    print("\n" + "="*60)
+    print("  ✅  Database setup complete!")
+    print()
+    print("  Next steps:")
+    print("  1. Install Node.js from https://nodejs.org (LTS version)")
+    print("  2. cd careermitra-backend && npm install")
+    print("  3. npm run dev")
+    print("  4. Open careermitra-android in Android Studio")
+    print("  5. Add BASE_URL=http://10.0.2.2:5000/api/ to local.properties")
+    print("="*60)
+
+if __name__ == "__main__":
+    run()
