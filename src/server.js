@@ -3,43 +3,38 @@ const app = require('./app');
 const pool = require('./config/database');
 const config = require('./config');
 
-const PORT = config.port;
+const PORT = process.env.PORT || config.port || 5000;
 
 const startServer = async () => {
+  // Start HTTP server first — Railway needs port binding quickly
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ CareerMitra AI Backend running on port ${PORT}`);
+    console.log(`   Mode : ${config.env}`);
+    console.log(`   AI   : ${config.ai.provider}`);
+    console.log(`   Demo : ${config.demoMode}`);
+  });
+
+  // Then verify DB connection
   try {
-    // Verify DB connection
     await pool.query('SELECT NOW()');
     console.log('✅ Database connection verified');
-
-    const server = app.listen(PORT, () => {
-      console.log(`
-╔══════════════════════════════════════════════╗
-║       CareerMitra AI Backend Server           ║
-║  Port    : ${PORT}                             
-║  Mode    : ${config.env}                      
-║  AI      : ${config.ai.provider}              
-║  Demo    : ${config.demoMode}                 
-╚══════════════════════════════════════════════╝
-      `);
-    });
-
-    // Graceful shutdown
-    const shutdown = async (signal) => {
-      console.log(`\n${signal} received — shutting down gracefully...`);
-      server.close(async () => {
-        await pool.end();
-        console.log('Database pool closed. Goodbye!');
-        process.exit(0);
-      });
-    };
-
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT',  () => shutdown('SIGINT'));
-
   } catch (err) {
-    console.error('❌ Failed to start server:', err);
-    process.exit(1);
+    console.error('⚠️  Database connection failed:', err.message);
+    console.error('   Check DATABASE_URL or DB_* environment variables');
+    // Don't exit — let Railway show the error in logs
   }
+
+  // Graceful shutdown
+  const shutdown = async (signal) => {
+    console.log(`\n${signal} received — shutting down...`);
+    server.close(async () => {
+      await pool.end();
+      process.exit(0);
+    });
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT',  () => shutdown('SIGINT'));
 };
 
 startServer();

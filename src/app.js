@@ -26,7 +26,22 @@ app.use(helmet());
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
 app.use(cors({
-  origin: config.cors.allowedOrigins,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    const allowed = config.cors.allowedOrigins;
+    // Also allow all railway.app and vercel.app subdomains in production
+    if (
+      allowed.includes(origin) ||
+      origin.endsWith('.railway.app') ||
+      origin.endsWith('.vercel.app') ||
+      origin.endsWith('.netlify.app') ||
+      config.env === 'development'
+    ) {
+      return callback(null, true);
+    }
+    callback(new Error(`CORS blocked: ${origin}`));
+  },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,

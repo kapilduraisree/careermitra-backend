@@ -4,10 +4,10 @@
   "description": "CareerMitra AI — REST API backend",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
+    "start": "node scripts/setup.js",
     "dev": "nodemon src/server.js",
     "db:migrate": "node database/migrate.js",
-    "db:seed": "psql $DATABASE_URL -f database/seed.sql"
+    "db:seed": "node database/migrate.js --seed"
   },
   "dependencies": {
     "@google/generative-ai": "^0.14.1",
