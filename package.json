@@ -4,8 +4,9 @@
   "description": "CareerMitra AI — REST API backend",
   "main": "src/server.js",
   "scripts": {
-    "start": "node scripts/setup.js",
+    "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "setup": "node scripts/setup.js",
     "db:migrate": "node database/migrate.js",
     "db:seed": "node database/migrate.js --seed"
   },
