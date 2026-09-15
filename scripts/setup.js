@@ -3,7 +3,9 @@
  * 1. Runs DB migration if needed
  * 2. Starts the Express server
  */
-require('dotenv').config();
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
 
 const { Client } = require('pg');
 const fs   = require('fs');
