@@ -3,6 +3,7 @@ const { success, paginated, notFound, error } = require('../utils/response');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { getPagination } = require('../utils/pagination');
 const { generateJobMatch } = require('../services/aiService');
+const { searchLiveJobs, syncJobs } = require('../services/jobFeedService');
 
 // ── Helper: build filter WHERE clause ────────────────────────────────────────
 const buildJobFilters = (query, paramOffset = 1) => {
@@ -355,6 +356,40 @@ const getDailyAlerts = asyncHandler(async (req, res) => {
   return success(res, alerts, 'Daily job alerts');
 });
 
+
+// ── GET /api/jobs/live — real-time search from Adzuna ─────────────────────────
+const getLiveJobs = asyncHandler(async (req, res) => {
+  const { search = 'software developer', location = 'india', page = 1 } = req.query
+
+  // First try live Adzuna
+  const liveJobs = await searchLiveJobs(search, location, parseInt(page))
+
+  if (liveJobs.length) {
+    return success(res, liveJobs, `${liveJobs.length} live jobs from Adzuna`)
+  }
+
+  // Fallback to DB
+  const { rows } = await pool.query(
+    `SELECT j.*, c.name AS company_name FROM jobs j
+     LEFT JOIN companies c ON j.company_id = c.id
+     WHERE j.is_active = TRUE AND j.job_type = 'private'
+     ORDER BY j.posted_at DESC LIMIT 20`
+  )
+  return success(res, rows, 'Jobs from database')
+})
+
+// ── POST /api/jobs/sync — trigger job sync (admin only) ───────────────────────
+const triggerJobSync = asyncHandler(async (req, res) => {
+  const { queries, locations } = req.body
+
+  // Run sync in background
+  syncJobs({ queries, locations }).catch(err =>
+    console.error('Background sync error:', err.message)
+  )
+
+  return success(res, { message: 'Job sync started in background' })
+})
+
 module.exports = {
   getAllJobs,
   getGovernmentJobs,
@@ -365,4 +400,6 @@ module.exports = {
   checkEligibility,
   checkJobScam,
   getDailyAlerts,
-};
+  getLiveJobs,
+  triggerJobSync,
+}
