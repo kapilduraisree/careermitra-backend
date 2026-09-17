@@ -739,9 +739,9 @@ async function ensureMockTest(client, mockTestId, examId, examKey) {
   };
 
   await client.query(
-    `INSERT INTO mock_tests (id, exam_id, title, duration_minutes, total_marks, passing_marks, is_active)
+    `INSERT INTO mock_tests (id, exam_id, title, description, duration_min, total_marks, pass_marks, question_count, is_demo)
      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [mockTestId, examId, examNames[examKey], 120, 100, 40, true]
+    [mockTestId, examId, examNames[examKey], 'Demo mock test for ' + examKey, 60, 20, 7, 10, true]
   );
   console.log(`  Created mock test: ${examNames[examKey]}`);
 }
