@@ -740,7 +740,7 @@ async function ensureMockTest(client, mockTestId, examId, examKey) {
 
   await client.query(
     `INSERT INTO mock_tests (id, exam_id, title, description, duration_min, total_marks, pass_marks, question_count, is_demo)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [mockTestId, examId, examNames[examKey], 'Demo mock test for ' + examKey, 60, 20, 7, 10, true]
   );
   console.log(`  Created mock test: ${examNames[examKey]}`);
@@ -764,10 +764,10 @@ async function linkQuestionsToMockTest(client, mockTestId, questionIds) {
   for (let i = 0; i < questionIds.length; i++) {
     // Use ON CONFLICT DO NOTHING in case some already exist
     await client.query(
-      `INSERT INTO mock_test_questions (mock_test_id, question_id, question_order)
-       VALUES ($1, $2, $3)
+      `INSERT INTO mock_test_questions (test_id, question_id, order_index, marks)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT DO NOTHING`,
-      [mockTestId, questionIds[i], i + 1]
+      [mockTestId, questionIds[i], i + 1, 2]
     );
     linked++;
   }
