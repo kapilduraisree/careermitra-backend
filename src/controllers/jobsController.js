@@ -361,21 +361,25 @@ const getDailyAlerts = asyncHandler(async (req, res) => {
 const getLiveJobs = asyncHandler(async (req, res) => {
   const { search = 'software developer', location = 'india', page = 1 } = req.query
 
-  // First try live Adzuna
+  console.log(`Live jobs request: search="${search}" location="${location}" ADZUNA_APP_ID=${process.env.ADZUNA_APP_ID ? 'SET' : 'NOT SET'}`)
+
+  // Try live Adzuna first
   const liveJobs = await searchLiveJobs(search, location, parseInt(page))
 
-  if (liveJobs.length) {
+  if (liveJobs.length > 0) {
+    console.log(`Returning ${liveJobs.length} live jobs from Adzuna`)
     return success(res, liveJobs, `${liveJobs.length} live jobs from Adzuna`)
   }
 
-  // Fallback to DB
+  // Fallback to DB if Adzuna fails
+  console.log('Adzuna returned 0 jobs, falling back to DB')
   const { rows } = await pool.query(
-    `SELECT j.*, c.name AS company_name FROM jobs j
+    `SELECT j.*, c.name AS company_name, c.logo_url FROM jobs j
      LEFT JOIN companies c ON j.company_id = c.id
      WHERE j.is_active = TRUE AND j.job_type = 'private'
      ORDER BY j.posted_at DESC LIMIT 20`
   )
-  return success(res, rows, 'Jobs from database')
+  return success(res, rows, 'Jobs from database (Adzuna unavailable)')
 })
 
 // ── POST /api/jobs/sync — trigger job sync (admin only) ───────────────────────

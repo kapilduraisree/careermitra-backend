@@ -4,23 +4,27 @@
  * API keys read from environment variables — never hardcoded
  */
 
-const https = require('https')
-const pool  = require('../config/database')
+const https  = require('https')
+const pool   = require('../config/database')
+const COUNTRY = 'in'  // India
 
-const ADZUNA_APP_ID  = process.env.ADZUNA_APP_ID
-const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY
-const COUNTRY        = 'in'  // India
+// Read keys dynamically so Railway env vars are always fresh
+const getKeys = () => ({
+  appId:  process.env.ADZUNA_APP_ID  || '',
+  appKey: process.env.ADZUNA_APP_KEY || '',
+})
 
 // ── Fetch from Adzuna ─────────────────────────────────────────────────────────
 const fetchAdzunaJobs = (query, location, page = 1, perPage = 20) => {
   return new Promise((resolve, reject) => {
-    if (!ADZUNA_APP_ID || !ADZUNA_APP_KEY) {
-      return reject(new Error('ADZUNA_APP_ID or ADZUNA_APP_KEY not set'))
+    const { appId, appKey } = getKeys()
+    if (!appId || !appKey) {
+      return reject(new Error('ADZUNA_APP_ID or ADZUNA_APP_KEY not set in environment'))
     }
 
     const params = new URLSearchParams({
-      app_id:           ADZUNA_APP_ID,
-      app_key:          ADZUNA_APP_KEY,
+      app_id:           appId,
+      app_key:          appKey,
       results_per_page: perPage,
       what:             query,
       where:            location || 'india',
@@ -193,21 +197,22 @@ const syncJobs = async (options = {}) => {
 // ── Search live from Adzuna (real-time search) ────────────────────────────────
 const searchLiveJobs = async (query, location, page = 1) => {
   try {
-    const data = await fetchAdzunaJobs(query, location || 'india', page, 20)
+    const data = await fetchAdzunaJobs(query, location || 'india', page, 15)
     return (data.results || []).map(job => ({
-      id:           `adzuna_${job.id}`,
-      title:        job.title,
-      company_name: job.company?.display_name,
-      location:     job.location?.display_name,
-      description:  job.description,
+      id:             `adzuna_${job.id}`,
+      title:          job.title,
+      company_name:   job.company?.display_name || 'Company',
+      location:       job.location?.display_name || job.location?.area?.slice(0,2).join(', ') || 'India',
+      description:    job.description?.substring(0, 300) + '...',
       salary_display: buildSalaryDisplay(job.salary_min, job.salary_max),
-      apply_url:    job.redirect_url,
-      job_type:     'private',
-      category:     mapCategory(job.category?.label),
-      posted_at:    job.created,
-      is_demo:      false,
-      is_live:      true,
-      source:       'adzuna',
+      apply_url:      job.redirect_url,
+      job_type:       'private',
+      category:       mapCategory(job.category?.label),
+      posted_at:      job.created,
+      is_demo:        false,
+      is_live:        true,
+      source:         'adzuna',
+      required_skills: [],
     }))
   } catch (err) {
     console.error('Live search error:', err.message)
@@ -218,8 +223,9 @@ const searchLiveJobs = async (query, location, page = 1) => {
 // ── Get job categories from Adzuna ────────────────────────────────────────────
 const getAdzunaCategories = () => {
   return new Promise((resolve, reject) => {
-    if (!ADZUNA_APP_ID || !ADZUNA_APP_KEY) return resolve([])
-    const url = `https://api.adzuna.com/v1/api/jobs/${COUNTRY}/categories?app_id=${ADZUNA_APP_ID}&app_key=${ADZUNA_APP_KEY}`
+    const { appId, appKey } = getKeys()
+    if (!appId || !appKey) return resolve([])
+    const url = `https://api.adzuna.com/v1/api/jobs/${COUNTRY}/categories?app_id=${appId}&app_key=${appKey}`
     https.get(url, (res) => {
       let data = ''
       res.on('data', c => data += c)
