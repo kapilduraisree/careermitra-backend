@@ -1,4 +1,4 @@
--- CareerMitra Questions Dump
+-- CareerMitra Questions Dump (UTF8)
 
 INSERT INTO questions(id,exam_id,topic,question_text,option_a,option_b,option_c,option_d,correct_ans,explanation,difficulty,year,is_demo) VALUES('36c5cb89-718d-4a25-8a54-8d9fbed0cb38','c1000000-0000-0000-0000-000000000001','Number System','[DEMO] What is the LCM of 12, 15, and 20?','30','60','120','180','B','LCM(12,15,20): 12=2²×3, 15=3×5, 20=2²×5. LCM = 2²×3×5 = 60.','easy',NULL,TRUE) ON CONFLICT DO NOTHING;
 INSERT INTO questions(id,exam_id,topic,question_text,option_a,option_b,option_c,option_d,correct_ans,explanation,difficulty,year,is_demo) VALUES('f219acc6-91c8-4cc1-a297-e5913e5afbd4','c1000000-0000-0000-0000-000000000001','Percentage','[DEMO] A product is sold at 20% profit. Cost price is ₹250. Find the selling price.','₹270','₹280','₹290','₹300','D','SP = CP × (1 + 0.20) = 250 × 1.20 = ₹300.','easy',NULL,TRUE) ON CONFLICT DO NOTHING;
